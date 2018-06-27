@@ -9,7 +9,7 @@ The acoustic models are evaluated on the TIMIT phone recognition task.
 
 # Repository Description
 ## Folder Structure
-* **data** - Features, utterance offsets, targets
+* **data** - Features, utterance offsets, targets. Data in this directory are not part of the repository and must be downloaded separately from [this link](https://drive.google.com/file/d/1AoHfgZClyFCA6596h483u3Th8jXXThO5/view?usp=sharing)
 * **kaldi** - Baseline HMM-DNN model trained in Kaldi
 * **recog** - Recognizer executable and files used only in recognizer
 * **recog_src** - Recognizer source files, needed only when building the recongizer and not using precompiled executable in _recog_ folder
@@ -23,6 +23,8 @@ Each feature type is saved in a separate subfolder.
 All feature files have the name _data\_{}.npy_ and each subfolder also contains a feature transform in a file _final.feature_transform_.
 
 All data files are in numpy _.npy_ format and contain concatenated training, development and test utterances. The _data_ directory contains lists of the original utterance names. The data files were generated in the same order. The offsets of each utterance or speaker are provided in files _offsets\_{}.npy_ and _offsets\_spk\_{}.npy_.
+
+**Note**: Data in the _data_ directory are not part of this repository and must be downloaded separately from [this link](https://drive.google.com/file/d/1AoHfgZClyFCA6596h483u3Th8jXXThO5/view?usp=sharing).
 
 Used features are:
 
