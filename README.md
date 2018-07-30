@@ -4,6 +4,7 @@ The scripts use Python framework Chainer which supports GPU.
 These scripts were used in the following publications:
 * [A Survey of Recent DNN Architectures on the TIMIT Phone Recognition Task, TSD 2018](http://arxiv.org/abs/1806.07974)
 * [Recurrent DNNs and its Ensembles on the TIMIT Phone Recognition Task, SPECOM 2018](https://arxiv.org/abs/1806.07186)
+* [A Comparison of Adaptation Techniques and Recurrent Neural Network Architectures](https://arxiv.org/abs/1807.06441)
 
 The acoustic models are evaluated on the TIMIT phone recognition task.
 
