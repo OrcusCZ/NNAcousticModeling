@@ -17,8 +17,8 @@ from chainer.iterators import SerialIterator
 from chainer_networks import get_nn, is_nn_recurrent
 from RPL import RPL0, RPL, RPL2, RPL3, RPL4
 # util
-from orcus_util import index_padded, apply_time_delay
-from orcus_chainer_util import model_saver, SequenceShuffleIterator, BPTTUpdater
+from orcus_util import index_padded, apply_time_delay, str2bool
+from orcus_chainer_util import model_saver, BestModelSaver, SequenceShuffleIterator, BPTTUpdater
 from kw_utils import loadBin, splicing
 from kw_nn_utils import loadKaldiFeatureTransform, applyKaldiFeatureTransform
 from chainer_kw_utils import EarlyStoppingTrigger
@@ -27,8 +27,9 @@ def main(arg_list=None):
     parser = argparse.ArgumentParser(description='Chainer LSTM')
     parser.add_argument('--epoch', '-e', type=int, nargs='+', default=[20], help='Number of sweeps over the dataset to train')
     parser.add_argument('--optimizer', '-o', nargs='+', default=['momentumsgd'], help='Optimizer (sgd, momentumsgd, adam)')
-    parser.add_argument('--batchsize', '-b', type=int, nargs='+', default=[128], help='Number of training points in each mini-batch')
+    parser.add_argument('--batch-size', '-b', type=int, nargs='+', default=[128], help='Number of training points in each mini-batch')
     parser.add_argument('--lr', type=float, nargs='+', default=[1e-2, 1e-3, 1e-4, 1e-5], help='Learning rate')
+    parser.add_argument('--early-stopping', type=str2bool, nargs='+', default=[True], help="True if early stopping should be enabled")
     parser.add_argument('--network', '-n', default='ff', help='Neural network type, either "ff", "tdnn", "lstm", "zoneoutlstm", "peepholelstm" or "gru". Setting any recurrent network implies "--shuffle-sequences"')
     parser.add_argument('--frequency', '-f', type=int, default=-1, help='Frequency of taking a snapshot')
     parser.add_argument('--gpu', '-g', type=int, default=0, help='GPU ID (negative value indicates CPU)')
@@ -228,7 +229,7 @@ def main(arg_list=None):
             x_dev = splicing(x_dev, range(-splice, splice + 1))
         
         # load feature transform
-        if not args.ft and args.ft != '-':
+        if args.ft is not None and args.ft != '-':
             ft = loadKaldiFeatureTransform(str(Path(args.data_dir, args.ft)))
             if is_nn_recurrent(args.network): # select transform middle frame if the network is recurrent
                 dim = ft["shape"][1]
@@ -267,19 +268,24 @@ def main(arg_list=None):
         dev_dataset = chainer.datasets.TupleDataset(x_dev, y_dev)
         
     # prepare train stages
-    train_stages_len = max(len(args.batchsize), len(args.lr))
+    train_stages_len = max([len(a) for a in [args.epoch,
+        args.optimizer,
+        args.batch_size,
+        args.lr,
+        args.early_stopping]])
     train_stages = [{
         'epoch': index_padded(args.epoch, i),
         'opt': index_padded(args.optimizer, i),
-        'bs': index_padded(args.batchsize, i),
-        'lr': index_padded(args.lr, i)}
+        'bs': index_padded(args.batch_size, i),
+        'lr': index_padded(args.lr, i),
+        'es': index_padded(args.early_stopping, i)}
         for i in range(train_stages_len)]
         
     for i, ts in enumerate(train_stages):
         if ts['opt'] == 'adam': # learning rate not used, don't print it
-            print("=== Training stage {}: epoch = {}, batchsize = {}, optimizer = {}".format(i, ts['epoch'], ts['bs'], ts['opt']))
+            print("=== Training stage {}: epoch = {}, batch size = {}, optimizer = {}, early stopping = {}".format(i, ts['epoch'], ts['bs'], ts['opt'], ts['es']))
         else:
-            print("=== Training stage {}: epoch = {}, batchsize = {}, optimizer = {}, learning rate = {}".format(i, ts['epoch'], ts['bs'], ts['opt'], ts['lr']))
+            print("=== Training stage {}: epoch = {}, batch size = {}, optimizer = {}, learning rate = {}, early stopping = {}".format(i, ts['epoch'], ts['bs'], ts['opt'], ts['lr'], ts['es']))
 
         # reset state to allow training with different batch size in each stage
         if not args.train_rpl and is_nn_recurrent(args.network):
@@ -311,13 +317,16 @@ def main(arg_list=None):
             updater = BPTTUpdater(train_iter, optimizer, args.bproplen, device=args.gpu)
         else:
             updater = StandardUpdater(train_iter, optimizer, device=args.gpu)
-        if args.use_validation:
+        if ts['es'] and args.use_validation:
             stop_trigger = EarlyStoppingTrigger(ts['epoch'], key='validation/main/loss', eps=-0.001)
         else:
             stop_trigger = (ts['epoch'], 'epoch')
         trainer = training.Trainer(updater, stop_trigger, out="{}/{}".format(args.out, i))
         
-        trainer.extend(model_saver)
+        if ts['es']:
+            trainer.extend(model_saver)
+        else:
+            trainer.extend(BestModelSaver(key="validation/main/loss"))
 
         # evaluate the model with the development dataset for each epoch
         if args.use_validation:
@@ -365,13 +374,19 @@ def main(arg_list=None):
         # Run the training
         trainer.run()
         
-        # load the last model if the max epoch was not reached (that means early stopping trigger stopped training
-        # because the validation loss increased)
-        if updater.epoch_detail < ts['epoch']:
-            chainer.serializers.load_npz("{}/{}/model_tmp".format(args.out, i), model_cls)
+        if ts['es']:
+            # load the last model if the max epoch was not reached (that means early stopping trigger stopped training
+            # because the validation loss increased)
+            if updater.epoch_detail < ts['epoch']:
+                chainer.serializers.load_npz("{}/{}/model_tmp".format(args.out, i), model_cls)
+            # remove temporary model from this training stage
+            os.remove("{}/{}/model_tmp".format(args.out, i))
+        else:
+            # load the best model from this training stage
+            chainer.serializers.load_npz("{}/{}/model_best".format(args.out, i), model_cls)
+            # remove the best model from this training stage
+            os.remove("{}/{}/model_best".format(args.out, i))
         
-        # remove temporary model from this training stage
-        os.remove("{}/{}/model_tmp".format(args.out, i))
         
     # save the final model
     chainer.serializers.save_npz("{}/model".format(args.out), model_cls)

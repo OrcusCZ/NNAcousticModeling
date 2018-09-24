@@ -140,7 +140,7 @@ def main(arg_list=None):
     else:
         splice = args.splice
 
-    if not args.ft and args.ft != '-':
+    if args.ft is not None and args.ft != '-':
         ft = loadKaldiFeatureTransform(str(Path(args.data_dir, args.ft)))
         if is_nn_recurrent(args.network):
             dim = ft["shape"][1]

@@ -167,7 +167,7 @@ def main(arg_list=None):
     winlen = 2 * splice + 1
         
     # load feature transform
-    if not args.ft and args.ft != '-':
+    if args.ft is not None and args.ft != '-':
         ft = loadKaldiFeatureTransform(str(Path(args.data_dir, args.ft)))
         if is_nn_recurrent(args.network): # select transform middle frame if the network is recurrent
             dim = ft["shape"][1]

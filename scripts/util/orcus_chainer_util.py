@@ -11,6 +11,46 @@ def model_saver(trainer):
     model = trainer.updater.get_optimizer("main").target
     chainer.serializers.save_npz("{}/model_tmp".format(trainer.out), model)
 
+class BestModelSaver(chainer.training.extension.Extension):
+    def __init__(self, key, best_is_min=True, filename="model_best", trigger=(1, 'epoch')):
+        self._key = key
+        self._best_is_min = best_is_min
+        self._filename = filename
+        self._trigger = chainer.training.trigger.get_trigger(trigger)
+        self._best_value = None
+
+        self._init_summary()
+
+    def __call__(self, trainer):
+        # accumulate the observations
+        key = self._key
+        observation = trainer.observation
+        summary = self._summary
+
+        if key in observation:
+            summary.add({key: observation[key]})
+
+        if self._trigger(trainer):
+            stats = self._summary.compute_mean()
+            value = float(stats[key])  # copy to CPU
+
+            if self._best_value is None:
+                self._best_value = value
+                self._save_model(trainer)
+            elif (self._best_is_min and value < self._best_value) or (not self._best_is_min and value > self._best_value):
+                self._best_value = value
+                self._save_model(trainer)
+
+            # reset the summary for the next output
+            self._init_summary()
+
+    def _save_model(self, trainer):
+        model = trainer.updater.get_optimizer("main").target
+        chainer.serializers.save_npz("{}/{}".format(trainer.out, self._filename), model)
+
+    def _init_summary(self):
+        self._summary = chainer.reporter.DictSummary()
+
 # iterator which generates data from randomly sorted sequences.
 # data from each sequence are in the correct order, only the sequences as a whole are shuffled
 class SequenceShuffleIterator(chainer.dataset.Iterator):

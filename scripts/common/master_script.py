@@ -8,6 +8,8 @@ from train import main as train_main
 from evaluate import main as evaluate_main
 from generate_folds import main as generate_folds_main
 from predict_folds import main as predict_folds_main
+# util
+from orcus_util import str2bool
 
 def main():
     parser = argparse.ArgumentParser(description='RPL experiments master script')
@@ -26,9 +28,12 @@ def main():
     parser.add_argument('--ft', default='final.feature_transform')
     parser.add_argument('--output-id', default='tmp')
     parser.add_argument('--network-spec', default='-n lstm -l 4 -u 1024 --timedelay 5 -d 0.2')
-    parser.add_argument('--batch-size', '-b', type=int, nargs='+', default=[256, 128])
+    parser.add_argument('--rpl-train-setup', default='-b 1024 --epoch 20 -o adam --lr 1e-3')
+    parser.add_argument('--epoch', '-e', type=int, nargs='+', default=[20], help='Number of sweeps over the dataset to train')
     parser.add_argument('--optimizer', '-o', nargs='+', default=['adam', 'momentumsgd'])
+    parser.add_argument('--batch-size', '-b', type=int, nargs='+', default=[256, 128])
     parser.add_argument('--lr', type=float, nargs='+', default=[1e-2, 1e-3, 1e-4, 1e-5], help='Learning rate')
+    parser.add_argument('--early-stopping', type=str2bool, nargs='+', default=[True], help="True if early stopping should be enabled")
     parser.add_argument('--fold-data-dir', help='Directory with fold input data')
     parser.add_argument('--fold-output-dir', help='Directory with predicted fold output')
     parser.add_argument('--fold-model-dir', help='Directory with output fold model')
@@ -99,10 +104,14 @@ def main():
             "--noplot",
             "-b"]
         cmd += args.batch_size
-        cmd += ["--epoch", 20, "-o"]
+        cmd += ["--epoch"]
+        cmd += args.epoch
+        cmd += ["-o"]
         cmd += args.optimizer
         cmd += ["--lr"]
         cmd += args.lr
+        cmd += ["--early-stopping"]
+        cmd += args.early_stopping
         cmd += ["--data-dir", args.data_dir,
             "--offset-dir", args.offset_dir,
             "--target-dir", args.target_dir,
@@ -129,10 +138,14 @@ def main():
                 "--noplot",
                 "-b"]
             cmd += args.batch_size
-            cmd += ["--epoch", 20, "-o"]
+            cmd += ["--epoch"]
+            cmd += args.epoch
+            cmd += ["-o"]
             cmd += args.optimizer
             cmd += ["--lr"]
             cmd += args.lr
+            cmd += ["--early-stopping"]
+            cmd += args.early_stopping
             cmd += ["--data-dir", args.data_dir,
                 "--offset-dir", args.offset_dir,
                 "--target-dir", args.target_dir,
@@ -204,7 +217,6 @@ def main():
         print("==== Training RPL layer")
         cmd = ["--train-rpl",
             "--tri",
-            "-b", 1024, "--epoch", 20, "-o", "adam", "--lr", "1e-3",
             "--data-dir", args.fold_output_dir,
             "--target-dir", args.target_dir,
             "--data", args.fold_output_dev,
@@ -214,6 +226,7 @@ def main():
             "--fold-output-pattern", args.fold_output_pattern,
             "--fold-target-pattern", args.fold_target_pattern,
             "--out", args.rpl_dir]
+        cmd += args.rpl_train_setup.split()
         if args.no_progress:
             cmd += ['--no-progress']
         train_main(cmd)
@@ -227,7 +240,7 @@ def main():
             for eval_folds in [False, True]:
                 for eval_master in [False, True]:
                     for eval_rpl in [False, True]:
-                        if (args.num_folds > 0 or args.eval_only_master) and (eval_folds or not eval_master or eval_rpl):
+                        if (args.num_folds == 0 or args.eval_only_master) and (eval_folds or not eval_master or eval_rpl):
                             continue
                         if eval_folds or eval_master:
                             print("==== Evaluating {}folds {}master {}rpl".format("+" if eval_folds else "-", "+" if eval_master else "-", "+" if eval_rpl else "-"))
