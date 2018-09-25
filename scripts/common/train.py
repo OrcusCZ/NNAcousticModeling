@@ -163,7 +163,8 @@ def main(arg_list=None):
             x = []
             offsets = [0]
             y = []
-            ivectors = []
+            if args.ivector_dir is not None:
+                ivectors = []
             num = 0
             fold = 0
             while True:
